@@ -3,6 +3,7 @@
 use App\Services\News\Providers\MarketauxProvider;
 use App\Services\News\Providers\NewsApiProvider;
 use App\Services\News\Providers\RssNewsProvider;
+use App\Services\News\Providers\YahooCompanyRssProvider;
 
 return [
 
@@ -16,7 +17,8 @@ return [
     |
     */
     'providers' => [
-        RssNewsProvider::class,
+        YahooCompanyRssProvider::class, // gericht per ticker → vult de bedrijfs-nieuwstabs
+        RssNewsProvider::class,         // brede markt-feeds
         MarketauxProvider::class,
         NewsApiProvider::class,
     ],
@@ -49,6 +51,13 @@ return [
     'newsapi' => [
         'key' => env('NEWSAPI_API_KEY'),
         'base_url' => 'https://newsapi.org/v2',
+    ],
+
+    // Finnhub company-news (historische backfill via `php artisan news:backfill`).
+    // Deelt de FINNHUB_API_KEY met de koers-provider.
+    'finnhub' => [
+        'key' => env('FINNHUB_API_KEY'),
+        'base_url' => 'https://finnhub.io/api/v1',
     ],
 
     /*

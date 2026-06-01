@@ -24,25 +24,41 @@ class NewsIngester
     ) {}
 
     /**
+     * Verzamel uit alle geconfigureerde providers en verwerk de batch.
+     *
      * @return array{fetched: int, created: int, linked: int}
      */
     public function run(): array
     {
-        $companies = Company::query()->active()->get();
+        $articles = [];
 
-        /** @var array<string, NewsArticleData> $batch */
-        $batch = [];
-
-        // 1. Verzamel uit alle providers, dedupliceer binnen de batch op url_hash.
         foreach ($this->providers as $provider) {
             if (! $provider->isConfigured()) {
                 continue;
             }
 
-            foreach ($provider->fetch() as $article) {
-                // First-wins: behoud de eerste (vaak rijkste, bv. api-tagged) variant.
-                $batch[$article->urlHash()] ??= $article;
-            }
+            $articles = array_merge($articles, $provider->fetch());
+        }
+
+        return $this->ingest($articles);
+    }
+
+    /**
+     * Dedupliceer (binnen de batch + t.o.v. de DB), match aan bedrijven en
+     * schrijf transactioneel weg. Herbruikbaar voor backfill (SP/news:backfill).
+     *
+     * @param  iterable<NewsArticleData>  $articles
+     * @return array{fetched: int, created: int, linked: int}
+     */
+    public function ingest(iterable $articles): array
+    {
+        $companies = Company::query()->active()->get();
+
+        // 1. Dedupliceer binnen de batch op url_hash (first-wins → rijkste variant).
+        /** @var array<string, NewsArticleData> $batch */
+        $batch = [];
+        foreach ($articles as $article) {
+            $batch[$article->urlHash()] ??= $article;
         }
 
         $fetched = count($batch);

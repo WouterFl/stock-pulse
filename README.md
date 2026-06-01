@@ -62,6 +62,20 @@ npm run dev
 
 Horizon-dashboard: `http://localhost:8000/horizon` (zichtbaar voor ingelogde users).
 
+### Nieuws handmatig ophalen
+
+Zonder draaiende scheduler kun je on-demand ophalen:
+
+```bash
+php artisan news:fetch                      # nu meteen ophalen uit alle providers
+php artisan news:backfill --days=90         # historie per bedrijf via Finnhub (vereist FINNHUB_API_KEY)
+php artisan news:backfill --days=180 --ticker=AAPL
+```
+
+Nieuwsbronnen (zie `config/news.php`): een **per-ticker Yahoo-feed** (vult de
+bedrijfs-nieuwstabs, geen key nodig), brede markt-RSS, en optioneel Marketaux /
+NewsAPI / Finnhub. Finnhub's `company-news` levert historie met datumbereik.
+
 ## Configuratie
 
 | Bestand | Doel |
