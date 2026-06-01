@@ -72,6 +72,35 @@ Horizon-dashboard: `http://localhost:8000/horizon` (zichtbaar voor ingelogde use
 
 API-keys (optioneel) en VAPID-keys (web push, Sprint 5) staan in `.env` — zie `.env.example`.
 
+## Deployment (Docker)
+
+Productie draait als Docker-stack (zelfde opzet als de andere WPPF-projecten):
+een multi-stage image (Composer → Vite-build op Node 22 → `php:8.4-fpm-alpine`
+met nginx + supervisor), met daarnaast MySQL, Redis, Horizon, een scheduler en Reverb.
+
+| Service | Rol |
+|---|---|
+| `app` | nginx + PHP-FPM (poort 8003 → Caddy) |
+| `mysql` | MySQL 8 |
+| `redis` | queues + Horizon + broadcasting |
+| `horizon` | queue-workers (`quotes`/`news`/`push`) |
+| `scheduler` | `schedule:work` (scrape-/news-/prune-/cleanup-jobs) |
+| `reverb` | websockets (poort 8083 → Caddy `/app/*`) |
+
+Workers wachten tot `app` healthy is (migraties klaar) voordat ze starten.
+
+**Deployen op de VPS:**
+
+```bash
+cp .env.docker.example .env.docker     # vul APP_KEY, DB_*, REVERB_*, VAPID_*, ADMIN_PASSWORD in
+cat infra/Caddyfile >> /etc/caddy/Caddyfile && systemctl reload caddy
+./deploy.sh                            # build + up + migrate + seed
+```
+
+`deploy.sh` regelt de `.env`-symlink, DNS-check, image-build, migraties en seeding.
+Caddy termineert TLS en proxiet `sp.wppf-development.com` → `127.0.0.1:8003`,
+en `/app/*` → `127.0.0.1:8083` (Reverb).
+
 ## PWA & Push
 
 Stock Pulse is een installeerbare PWA met web-push-notificaties voor alerts.

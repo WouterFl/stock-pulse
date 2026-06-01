@@ -1,0 +1,30 @@
+# ── Stock Pulse ───────────────────────────────────────────────────────────────
+# Voeg dit blok toe aan de master /etc/caddy/Caddyfile op de VPS en herlaad:
+#   cat infra/Caddyfile >> /etc/caddy/Caddyfile && systemctl reload caddy
+#
+# Poorten: app (nginx) op 8003, Reverb op 8083 (zie .env.docker / docker-compose.yml).
+
+sp.wppf-development.com {
+    encode zstd gzip
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    header -Server
+
+    # WebSocket → Reverb (Pusher-protocol: /app/{key} en /apps/{id})
+    handle /app/* {
+        reverse_proxy 127.0.0.1:8083 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Alles anders → nginx + PHP-FPM
+    handle {
+        reverse_proxy 127.0.0.1:8003
+    }
+
+    log {
+        output stderr
+        format console
+    }
+}

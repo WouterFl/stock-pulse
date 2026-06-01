@@ -1,0 +1,142 @@
+services:
+
+  # ── Database ──────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    env_file: .env.docker
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "127.0.0.1:3308:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - backend
+    restart: unless-stopped
+
+  # ── Redis (queues + Horizon + broadcasting backplane) ──────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ── PHP-FPM + Nginx ───────────────────────────────────────────────────────────
+  # Bindt op 127.0.0.1:8003 — VPS Caddy proxiet sp.wppf-development.com hierheen.
+  app:
+    build: .
+    env_file: .env.docker
+    ports:
+      - "127.0.0.1:${APP_PORT:-8003}:80"
+    volumes:
+      - storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Wordt pas healthy nadat de entrypoint heeft gemigreerd en supervisord draait.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ── Horizon (queue workers: quotes, news, push, default) ────────────────────────
+  horizon:
+    build: .
+    command: ["php", "artisan", "horizon"]
+    env_file: .env.docker
+    volumes:
+      - storage:/var/www/html/storage
+    depends_on:
+      # Wacht tot de app gemigreerd + healthy is (voorkomt cache/tabel-races).
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+    stop_grace_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ── Scheduler (quotes:dispatch, news, prune, push:cleanup-stale) ────────────────
+  scheduler:
+    build: .
+    command: ["php", "artisan", "schedule:work"]
+    env_file: .env.docker
+    volumes:
+      - storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ── Reverb WebSocket server ─────────────────────────────────────────────────────
+  # Bindt op 127.0.0.1:8083 — VPS Caddy proxiet /app/* hierheen.
+  reverb:
+    build: .
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    env_file: .env.docker
+    ports:
+      - "127.0.0.1:${REVERB_EXTERNAL_PORT:-8083}:8080"
+    depends_on:
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  backend:
+
+volumes:
+  mysql-data:
+  redis-data:
+  storage:
