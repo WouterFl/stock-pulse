@@ -21,14 +21,26 @@ Laravel + Filament webapp voor het monitoren van beursgenoteerde bedrijven: bedr
 
 ## Setup
 
+De database is **MySQL** (zowel lokaal als in productie). Lokaal draait MySQL in
+een eigen container op poort `3307`:
+
 ```bash
 composer install
-cp .env.example .env
+cp .env.example .env                  # vul DB_PASSWORD / DB_ROOT_PASSWORD in
 php artisan key:generate
-touch database/database.sqlite
-php artisan migrate --seed          # maakt admin-user + 5 testbedrijven
-npm install && npm run build         # met Node 20+
+
+docker compose -f docker-compose.dev.yml up -d   # lokale MySQL op 127.0.0.1:3307
+php artisan migrate --seed            # maakt admin-user + 5 testbedrijven
+
+npm install && npm run build          # met Node 20+
+
+# Vul vast wat data:
+php artisan news:fetch                # nieuws per bedrijf + markt-RSS
+php artisan quotes:dispatch           # koersen (verwerk daarna de queue: php artisan queue:work)
 ```
+
+> Tests draaien op een in-memory sqlite (zie `phpunit.xml`) en hebben dus géén
+> draaiende MySQL nodig.
 
 ### Inloggen
 

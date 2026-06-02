@@ -1,0 +1,25 @@
+# Lokale dev-database (MySQL 8) — los van de productie-stack.
+# Start met:  docker compose -f docker-compose.dev.yml up -d
+# De app (php artisan serve op de host) verbindt via 127.0.0.1:3307.
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: stock-pulse-mysql-dev
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-stock_pulse}
+      MYSQL_USER: ${DB_USERNAME:-stock_pulse}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql-dev-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  mysql-dev-data:
